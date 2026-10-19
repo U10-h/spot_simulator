@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>よりみち | 集合駅シミュレーター</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/"
+        >↗ よりみち <small>集合駅シミュレーター</small></a
+      ><span class="eyebrow">ROUTE PLANNER</span>
+    </header>
+    <main>
+      <datalist id="station-options"></datalist>
+      <section class="hero">
+        <p class="eyebrow">LESS TRAVEL. MORE TIME TOGETHER.</p>
+        <h1>みんなの「ちょうどいい」<br />集合駅を見つけよう。</h1>
+        <p>
+          出発駅と移動の好みから、時間と運賃のバランスを比較。<br />ひとつの正解ではなく、納得して選べる候補を。
+        </p>
+        <div class="map" aria-hidden="true">
+          <span>● ─── ╲</span><strong>集合</strong><span>╱ ─── ●</span>
+        </div>
+      </section>
+      <div id="provider-status" class="notice" role="status">
+        経路サービスの接続状態を確認しています…
+      </div>
+      <div id="sample-banner" class="notice sample" hidden>
+        架空サンプルを使用中です。所要時間・運賃は説明用の架空値で、実際の経路案内には使えません。
+      </div>
+      <div class="workspace">
+        <section class="panel setup">
+          <div class="section-head">
+            <p class="eyebrow">01 / PLAN</p>
+            <h2>集合の条件</h2>
+          </div>
+          <form id="planner-form">
+            <fieldset>
+              <legend>検索方法と集合時刻</legend>
+              <label for="mode">経路データ</label
+              ><select id="mode">
+                <option value="manual">手動入力</option>
+                <option value="live" disabled>
+                  時刻表から検索（接続が必要）
+                </option>
+              </select>
+              <div id="operator-options">
+                <p class="help">
+                  時刻表検索の対象（利用可能な事業者のみ選択可）
+                </p>
+                <div id="operator-list"></div>
+                <label for="station-fallback"
+                  ><input id="station-fallback" type="checkbox" />
+                  列車IDが一致する駅時刻表から経路を補完する（検証用）</label
+                >
+                <p class="help">
+                  列車時刻表が不足する場合のみ使用。発車時刻を到着時刻として扱います。列車を特定できないものは推測しません。
+                </p>
+              </div>
+              <label for="meeting-at">集合日時（日本時間・到着期限）</label
+              ><input id="meeting-at" type="datetime-local" required />
+              <p class="help">
+                対応事業者の範囲で時刻表を比較します。東京都内の全鉄道・全私鉄を網羅するものではありません。手動入力でも到着期限を満たす経路を用意してください。
+              </p>
+            </fieldset>
+            <fieldset>
+              <legend>参加する人</legend>
+              <p class="help">
+                出発駅を複数入力すると、経路がある駅からひとつを選びます。
+              </p>
+              <div id="participants"></div>
+              <button type="button" id="add-person" class="outline full">
+                ＋ 参加者を追加
+              </button>
+            </fieldset>
+            <fieldset>
+              <legend>
+                <label for="candidates">集合駅の候補（任意）</label>
+              </legend>
+              <input
+                id="candidates"
+                list="station-options"
+                placeholder="未入力なら対応範囲の東京都内駅を自動検索"
+              />
+              <p class="help">
+                実時刻表モードでは未入力で対象駅を自動探索。絞り込む場合はカンマ（,）または読点（、）で区切って入力。手入力モードでは必須です。
+              </p>
+            </fieldset>
+            <details open>
+              <summary>経路データ・計算設定 <span>手動入力</span></summary>
+              <div class="details-body">
+                <p class="help">
+                  経路データを入力してください。駅名は上の入力と完全に一致させます。
+                </p>
+                <button type="button" id="load-sample" class="outline full">
+                  架空のサンプルを読み込む</button
+                ><button
+                  type="button"
+                  id="clear-sample"
+                  class="outline full"
+                  hidden
+                >
+                  サンプルを消去して実データを入力</button
+                ><label for="routes">経路データ（JSON 配列）</label
+                ><textarea
+                  id="routes"
+                  rows="9"
+                  spellcheck="false"
+                  required
+                  placeholder='[{"participant_id":"p1","origin":"出発駅","destination":"集合駅","duration_minutes":30,"fare_yen":250,"transfer_minutes":5,"source":"手動入力"}]'
+                ></textarea>
+                <p class="help">
+                  参加者 ID
+                  は各カードに表示。所要時間には乗換時間と集合時刻までの早着後の待ち時間を含めて入力してください。source
+                  に取得元・取得日時などを記録できます。
+                </p>
+                <div class="scale-fields">
+                  <div>
+                    <label for="time-scale">時間の基準（分）</label
+                    ><input
+                      id="time-scale"
+                      type="number"
+                      min="1"
+                      value="60"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label for="fare-scale">運賃の基準（円）</label
+                    ><input
+                      id="fare-scale"
+                      type="number"
+                      min="1"
+                      value="1000"
+                      required
+                    />
+                  </div>
+                </div>
+                <p class="help">
+                  目的値は、各人の重み × 移動量 ÷
+                  基準値の合計。基準値は比較の尺度です。
+                </p>
+              </div>
+            </details>
+            <div id="form-error" class="error" role="alert" hidden></div>
+            <button id="calculate" type="submit" class="primary full">
+              集合駅を比較する ↗
+            </button>
+            <p class="privacy-note">予約・購入は行いません。</p>
+          </form>
+        </section>
+        <section class="results-area" aria-labelledby="results-heading">
+          <div class="section-head">
+            <p class="eyebrow">02 / COMPARE</p>
+            <h2 id="results-heading">ふたりにも、みんなにも。</h2>
+            <span id="result-count" hidden></span>
+          </div>
+          <div id="empty-state" class="panel empty">
+            <div class="empty-icon" aria-hidden="true">⌘</div>
+            <h3>集合までの移動を、見える化。</h3>
+            <p>
+              参加者と集合駅の候補、経路データを入力すると<br />時間と運賃のトレードオフを比較できます。
+            </p>
+            <div class="empty-steps">
+              <span>1 条件を入力</span><span>2 経路を用意</span
+              ><span>3 候補を比較</span>
+            </div>
+          </div>
+          <div id="loading" class="panel loading" role="status" hidden>
+            時刻表の取得と組合せを計算しています…
+            初回は1〜2分以上かかることがあります。
+          </div>
+          <div id="results" hidden>
+            <div class="panel chart-panel">
+              <h3>時間と運賃のバランス</h3>
+              <p class="help">
+                左下ほど負担が小さい、パレート最適な候補。片方を改善すると、もう片方が悪化する関係にあります。
+              </p>
+              <div id="chart"></div>
+              <p class="help">
+                軸は各人の好みを反映した目的値（無単位）。分・円の実値は各候補で確認できます。
+              </p>
+            </div>
+            <div id="warnings" class="notice" hidden></div>
+            <div id="solution-list"></div>
+            <details id="excluded-details" class="panel exclusions" hidden>
+              <summary>比較から外れた候補</summary>
+              <ul id="excluded-list"></ul>
+            </details>
+          </div>
+        </section>
+      </div>
+      <footer>
+        <b>よりみち</b>
+        <p>移動の負担を分かち合って、集まる時間をもっと心地よく。</p>
+      </footer>
+    </main>
+  </body>
+</html>
